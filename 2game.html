@@ -1,0 +1,804 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>變形骰寶 - 最終修正版</title>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --panel-color: #1e293b;
+            --accent-color: #fbbf24;
+            --player-color: #4ade80;
+            --dealer-color: #f87171;
+            --secondary-color: #334155;
+            --text-color: #f8fafc;
+            
+            --surrender-color: #db2777;
+            --stand-color: #3b82f6;
+            --double-color: #f59e0b;
+        }
+
+        body {
+            font-family: 'Roboto', 'Segoe UI', sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            padding: 10px;
+            user-select: none;
+            padding-bottom: 110px;
+        }
+
+        /* --- 初始設定畫面 --- */
+        .setup-screen {
+            position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg-color); z-index: 999;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .setup-box {
+            background: var(--panel-color); padding: 30px; border-radius: 20px;
+            border: 1px solid #475569; text-align: center; width: 90%; max-width: 400px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        .setup-input {
+            background: #0f172a; border: 2px solid var(--accent-color);
+            color: #fff; padding: 15px; font-size: 1.5rem; border-radius: 10px;
+            width: 100%; text-align: center; margin: 20px 0;
+            outline: none;
+        }
+        .btn-setup {
+            background: linear-gradient(135deg, #fbbf24, #d97706);
+            color: #000; border: none; padding: 15px 40px;
+            font-size: 1.2rem; font-weight: bold; border-radius: 30px; cursor: pointer;
+            width: 100%; transition: transform 0.1s;
+        }
+        .btn-setup:active { transform: scale(0.95); }
+
+        /* 頂部資訊 */
+        .header-info {
+            width: 100%;
+            max-width: 600px;
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr;
+            gap: 10px;
+            padding: 15px;
+            background: var(--panel-color);
+            border-radius: 16px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+            border: 1px solid #475569;
+        }
+        .info-item { text-align: center; display: flex; flex-direction: column; justify-content: center; }
+        .info-label { font-size: 0.8rem; color: #94a3b8; margin-bottom: 4px; }
+        .info-val { font-size: 1.3rem; font-weight: bold; }
+        
+        .val-player { color: var(--player-color); text-shadow: 0 0 10px rgba(74, 222, 128, 0.2); }
+        .val-dealer { color: var(--dealer-color); text-shadow: 0 0 10px rgba(248, 113, 113, 0.2); }
+        .val-pot { color: var(--accent-color); }
+
+        /* 骰子區 */
+        .dice-area {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-bottom: 25px;
+            perspective: 1000px;
+        }
+        .die {
+            width: 65px;
+            height: 65px;
+            background: #f1f5f9;
+            color: #0f172a;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 38px;
+            font-weight: bold;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+            transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            opacity: 0.2;
+            transform: scale(0.8) rotateX(45deg);
+        }
+        .die.active { opacity: 1; transform: scale(1) rotateX(0); background: #fff; }
+        .die.rolling { animation: shake 0.5s infinite; }
+
+        /* 提示文字 */
+        .instruction-text {
+            margin-bottom: 10px;
+            color: #cbd5e1; font-size: 0.95rem; text-align: center;
+            min-height: 1.5em; text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+
+        /* 下注盤面 */
+        .bet-grid {
+            display: grid;
+            grid-template-columns: repeat(7, 1fr);
+            gap: 8px;
+            width: 100%;
+            max-width: 600px;
+            position: relative;
+        }
+
+        .btn {
+            background: var(--secondary-color);
+            color: #94a3b8;
+            border: 2px solid #1e293b;
+            border-radius: 8px;
+            position: relative;
+            cursor: pointer;
+            transition: all 0.15s;
+        }
+        
+        .btn-bs { grid-column: span 3; padding: 15px; font-size: 1.2rem; font-weight: bold; color: #fff;}
+        .spacer { grid-column: span 1; }
+        .btn-sum {
+            grid-column: span 1; padding: 10px 2px; height: 70px;
+            display: flex; flex-direction: column; align-items: center; justify-content: center;
+        }
+        .btn-sum .num { font-size: 1.3rem; font-weight: bold; color: #f8fafc; }
+        .btn-sum .odds { font-size: 0.75rem; color: var(--accent-color); margin-top: 4px; }
+
+        /* 下注狀態 */
+        .btn.has-bet { 
+            background: #334155; 
+            border-color: var(--accent-color); 
+            box-shadow: inset 0 0 15px rgba(251, 191, 36, 0.1);
+        }
+        .bet-badge {
+            position: absolute; top: -10px; right: -10px;
+            background: var(--accent-color); color: #000;
+            border-radius: 50%; width: 28px; height: 28px;
+            display: none; align-items: center; justify-content: center;
+            font-size: 0.8rem; font-weight: bold; z-index: 10;
+            border: 2px solid var(--bg-color);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+        }
+        .has-bet .bet-badge { display: flex; }
+
+        /* 決策模式狀態 */
+        .decision-mode .btn:not(.has-bet) {
+            opacity: 0.15; pointer-events: none; filter: grayscale(100%);
+        }
+        .decision-mode .btn.has-bet:not(.acted) {
+            cursor: pointer;
+            border-color: #fff;
+            animation: pulse-border 1.5s infinite;
+        }
+        .decision-mode .btn.has-bet.acted {
+            opacity: 0.5; cursor: not-allowed; border-color: #475569; background: #0f172a;
+        }
+        .decision-mode .btn.has-bet.acted[data-last-action="surrender"] { border-color: var(--surrender-color); }
+        .decision-mode .btn.has-bet.acted[data-last-action="double"] { border-color: var(--double-color); }
+        .decision-mode .btn.has-bet.acted[data-last-action="stand"] { border-color: var(--stand-color); }
+
+        /* 彈出選單 */
+        .action-overlay {
+            position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(15, 23, 42, 0.85); z-index: 50;
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            border-radius: 12px; backdrop-filter: blur(8px);
+        }
+        .action-overlay.active { display: flex; }
+        
+        .action-menu {
+            background: #1e293b; padding: 25px; border-radius: 20px;
+            border: 1px solid #475569; display: flex; flex-direction: column;
+            gap: 12px; width: 260px; box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+        .menu-title { text-align: center; font-weight: bold; color: #fff; font-size: 1.1rem; }
+        .menu-subtitle { text-align: center; font-size: 0.85rem; color: #94a3b8; margin-bottom: 10px; }
+
+        .menu-btn {
+            padding: 12px 15px; border: none; border-radius: 10px;
+            font-size: 1rem; font-weight: bold; color: #fff; cursor: pointer;
+            display: flex; justify-content: space-between; align-items: center;
+            transition: transform 0.1s;
+        }
+        .menu-btn:active { transform: scale(0.98); }
+        .menu-btn:disabled { opacity: 0.5; cursor: not-allowed; filter: grayscale(100%); }
+        
+        .mb-surrender { background: var(--surrender-color); }
+        .mb-stand { background: var(--stand-color); }
+        .mb-double { background: var(--double-color); }
+
+        /* 底部操作列 */
+        .bottom-bar {
+            position: fixed; bottom: 0; left: 0; width: 100%;
+            background: #020617; padding: 15px 20px;
+            border-top: 1px solid #1e293b;
+            box-shadow: 0 -5px 20px rgba(0,0,0,0.5);
+            display: flex; justify-content: center; z-index: 100;
+        }
+        .mode-container { display: none; width: 100%; max-width: 600px; gap: 15px; justify-content: space-between; align-items: center;}
+        .mode-container.active { display: flex; }
+
+        .chip-selector { display: flex; gap: 15px; }
+        .chip {
+            width: 55px; height: 55px; border-radius: 50%;
+            border: 3px dashed rgba(255,255,255,0.2);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: bold; cursor: pointer; color: #fff;
+            transition: all 0.2s;
+        }
+        .chip:hover { transform: translateY(-2px); }
+        .chip.selected { border: 3px solid #fff; transform: translateY(-5px); box-shadow: 0 5px 15px rgba(0,0,0,0.3); }
+        .chip-10 { background: radial-gradient(circle at 30% 30%, #3b82f6, #1d4ed8); }
+        .chip-50 { background: radial-gradient(circle at 30% 30%, #ef4444, #b91c1c); }
+        .chip-100 { background: radial-gradient(circle at 30% 30%, #eab308, #a16207); color: #000; } 
+
+        .action-btn {
+            padding: 0 25px; height: 50px; border: none; border-radius: 25px;
+            font-size: 1.1rem; font-weight: bold; cursor: pointer; color: #fff;
+            display: flex; align-items: center; justify-content: center;
+            transition: all 0.2s;
+        }
+        .btn-start { 
+            background: linear-gradient(135deg, #fbbf24, #d97706); 
+            color: #0f172a; width: 140px; box-shadow: 0 0 20px rgba(251, 191, 36, 0.3);
+        }
+        .btn-start:disabled { background: #334155; color: #94a3b8; box-shadow: none; }
+        
+        .btn-clear { background: #334155; width: 80px; font-size: 0.9rem; color: #cbd5e1; }
+        .btn-clear:hover { background: #475569; color: #fff; }
+        
+        .btn-roll-next { 
+            background: linear-gradient(135deg, #3b82f6, #2563eb); 
+            width: 100%; max-width: 350px;
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.4);
+        }
+        
+        .btn-new-round {
+            background: linear-gradient(135deg, #10b981, #059669); 
+            width: 100%; max-width: 350px;
+            box-shadow: 0 0 20px rgba(16, 185, 129, 0.4);
+            animation: pulse-green 2s infinite;
+        }
+
+        .toast {
+            position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+            background: rgba(15, 23, 42, 0.95); color: #fff; padding: 10px 20px;
+            border-radius: 30px; font-size: 0.95rem; pointer-events: none; opacity: 0;
+            transition: opacity 0.2s; border: 1px solid #334155; z-index: 200;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); display: flex; align-items: center; gap: 8px;
+        }
+        .toast.show { opacity: 1; top: 90px; }
+
+        @keyframes pulse-border {
+            0% { border-color: rgba(255,255,255,0.2); }
+            50% { border-color: rgba(255,255,255,1); box-shadow: 0 0 15px rgba(255,255,255,0.3); }
+            100% { border-color: rgba(255,255,255,0.2); }
+        }
+        @keyframes pulse-green {
+            0% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.7); }
+            70% { box-shadow: 0 0 0 10px rgba(16, 185, 129, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(16, 185, 129, 0); }
+        }
+        @keyframes shake {
+            0% { transform: rotate(0deg); }
+            25% { transform: rotate(8deg); }
+            75% { transform: rotate(-8deg); }
+            100% { transform: rotate(0deg); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="setupScreen" class="setup-screen">
+        <div class="setup-box">
+            <h2 style="color:var(--accent-color); margin-bottom:10px;">設定本金</h2>
+            <p style="color:#94a3b8; font-size:0.9rem;">請輸入玩家初始金額 (單位 500)</p>
+            <input type="number" id="initialBalanceInput" class="setup-input" value="5000" min="500" step="500">
+            <button class="btn-setup" onclick="initGame()">進入遊戲</button>
+        </div>
+    </div>
+
+    <div id="toast" class="toast">提示訊息</div>
+
+    <div class="header-info">
+        <div class="info-item">
+            <div class="info-label">玩家本金</div>
+            <div class="info-val val-player" id="balanceDisplay">5000</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">莊家資金</div>
+            <div class="info-val val-dealer" id="dealerDisplay">20000</div>
+        </div>
+        <div class="info-item">
+            <div class="info-label">檯面總注</div>
+            <div class="info-val val-pot" id="totalBetDisplay">0</div>
+        </div>
+    </div>
+
+    <div class="dice-area">
+        <div id="die1" class="die">?</div>
+        <div id="die2" class="die">?</div>
+        <div id="die3" class="die">?</div>
+    </div>
+
+    <div id="instruction" class="instruction-text">擊敗莊家！請選擇籌碼下注</div>
+
+    <div style="position: relative; width: 100%; max-width: 600px;">
+        
+        <div id="actionMenu" class="action-overlay">
+            <div class="action-menu">
+                <div class="menu-title" id="menuTitle">操作</div>
+                <div class="menu-subtitle" id="menuSubtitle">選擇減倉後，50%被沒收給莊家</div>
+                
+                <button id="btnSurrender" class="menu-btn mb-surrender" onclick="confirmAction('surrender')">
+                    <span>減倉 (收回50%)</span>
+                    <span id="refundAmountVal">$0</span>
+                </button>
+                
+                <button class="menu-btn mb-stand" onclick="confirmAction('stand')">
+                    <span>觀望 (保持不變)</span>
+                    <span>➜</span>
+                </button>
+                
+                <button id="menuDoubleBtn" class="menu-btn mb-double" onclick="confirmAction('double')">
+                    <span>加碼 (注碼 x2)</span>
+                    <span id="doubleCostVal">-$0</span>
+                </button>
+                
+                <div style="text-align:center; margin-top:5px;">
+                    <button style="background:none; border:none; color:#64748b; text-decoration:underline; cursor:pointer; font-size:0.9rem" onclick="closeActionMenu()">取消</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="gameGrid" class="bet-grid">
+            <div class="btn btn-bs" id="btn_small_null" onclick="handleGridClick('small', null, this)">小 (4-10)<div class="bet-badge">0</div></div>
+            <div class="spacer"></div>
+            <div class="btn btn-bs" id="btn_big_null" onclick="handleGridClick('big', null, this)">大 (11-17)<div class="bet-badge">0</div></div>
+
+            <div class="btn btn-sum" id="btn_sum_4" onclick="handleGridClick('sum', 4, this)"><span class="num">4</span><span class="odds">1:50</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_5" onclick="handleGridClick('sum', 5, this)"><span class="num">5</span><span class="odds">1:18</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_6" onclick="handleGridClick('sum', 6, this)"><span class="num">6</span><span class="odds">1:14</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_7" onclick="handleGridClick('sum', 7, this)"><span class="num">7</span><span class="odds">1:12</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_8" onclick="handleGridClick('sum', 8, this)"><span class="num">8</span><span class="odds">1:8</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_9" onclick="handleGridClick('sum', 9, this)"><span class="num">9</span><span class="odds">1:6</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_10" onclick="handleGridClick('sum', 10, this)"><span class="num">10</span><span class="odds">1:6</span><div class="bet-badge">0</div></div>
+            
+            <div class="btn btn-sum" id="btn_sum_11" onclick="handleGridClick('sum', 11, this)"><span class="num">11</span><span class="odds">1:6</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_12" onclick="handleGridClick('sum', 12, this)"><span class="num">12</span><span class="odds">1:6</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_13" onclick="handleGridClick('sum', 13, this)"><span class="num">13</span><span class="odds">1:8</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_14" onclick="handleGridClick('sum', 14, this)"><span class="num">14</span><span class="odds">1:12</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_15" onclick="handleGridClick('sum', 15, this)"><span class="num">15</span><span class="odds">1:14</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_16" onclick="handleGridClick('sum', 16, this)"><span class="num">16</span><span class="odds">1:18</span><div class="bet-badge">0</div></div>
+            <div class="btn btn-sum" id="btn_sum_17" onclick="handleGridClick('sum', 17, this)"><span class="num">17</span><span class="odds">1:50</span><div class="bet-badge">0</div></div>
+        </div>
+    </div>
+
+    <div class="bottom-bar">
+        <div id="modeBetting" class="mode-container active">
+            <div class="chip-selector">
+                <div id="chip10" class="chip chip-10 selected" onclick="selectChip(10)">10</div>
+                <div id="chip50" class="chip chip-50" onclick="selectChip(50)">50</div>
+                <div id="chip100" class="chip chip-100" onclick="selectChip(100)">100</div>
+            </div>
+            <button class="action-btn btn-clear" onclick="clearBets()">清除</button>
+            <button id="btnStart" class="action-btn btn-start" onclick="startGame()" disabled>開始遊戲</button>
+        </div>
+
+        <div id="modeDecision" class="mode-container">
+            <button class="action-btn btn-roll-next" onclick="nextPhase()">
+                開下一顆骰子 (其他預設觀望)
+            </button>
+        </div>
+
+        <div id="modeResult" class="mode-container">
+            <button class="action-btn btn-new-round" onclick="resetGame()">
+                進入下一會合 ➜
+            </button>
+        </div>
+    </div>
+
+<script>
+    // --- 遊戲變數 ---
+    let balance = 5000;
+    let dealerBalance = 20000;
+    
+    let currentChip = 10;
+    let totalBet = 0;
+    let bets = {}; 
+    let gamePhase = 0; 
+    
+    let currentSelectedKey = null;
+    let currentSelectedBtn = null;
+
+    const elPhase = document.getElementById('instruction');
+    const elActionMenu = document.getElementById('actionMenu');
+    const elDice = [document.getElementById('die1'), document.getElementById('die2'), document.getElementById('die3')];
+
+    const odds = {
+        4: 50, 17: 50, 5: 18, 16: 18, 6: 14, 15: 14, 7: 12, 14: 12, 8: 8, 13: 8, 9: 6, 10: 6, 11: 6, 12: 6
+    };
+    const dieFaces = ['?', '⚀', '⚁', '⚂', '⚃', '⚄', '⚅'];
+
+    // --- 初始設置 ---
+    function initGame() {
+        const input = document.getElementById('initialBalanceInput');
+        let val = parseInt(input.value);
+        if (isNaN(val) || val < 500) {
+            alert("請輸入有效的金額 (最小 500)");
+            return;
+        }
+        // 確保是 500 的倍數
+        if (val % 500 !== 0) {
+            val = Math.floor(val / 500) * 500;
+            alert(`金額調整為 500 的倍數: ${val}`);
+        }
+        
+        balance = val;
+        dealerBalance = 20000;
+        document.getElementById('setupScreen').style.display = 'none';
+        updateInfo();
+    }
+
+    function showToast(msg) {
+        const t = document.getElementById('toast');
+        t.innerText = msg;
+        t.classList.add('show');
+        setTimeout(() => t.classList.remove('show'), 1500);
+    }
+
+    function selectChip(val) {
+        currentChip = val;
+        document.querySelectorAll('.chip').forEach(c => c.classList.remove('selected'));
+        if(val===10) document.getElementById('chip10').classList.add('selected');
+        if(val===50) document.getElementById('chip50').classList.add('selected');
+        if(val===100) document.getElementById('chip100').classList.add('selected');
+    }
+
+    function updateInfo() {
+        document.getElementById('balanceDisplay').innerText = parseFloat(balance.toFixed(1));
+        document.getElementById('dealerDisplay').innerText = parseFloat(dealerBalance.toFixed(1));
+        document.getElementById('totalBetDisplay').innerText = parseFloat(totalBet.toFixed(1));
+    }
+
+    // --- 核心互動 ---
+    function handleGridClick(type, target, btn) {
+        const key = `${type}_${target}`;
+
+        // 階段 A: 下注
+        if (gamePhase === 0) {
+            if (balance < currentChip) {
+                showToast("本金不足");
+                return;
+            }
+            balance -= currentChip;
+            totalBet += currentChip;
+            
+            if (!bets[key]) bets[key] = { amount: 0, acted: false };
+            bets[key].amount += currentChip;
+
+            btn.classList.add('has-bet');
+            btn.querySelector('.bet-badge').innerText = bets[key].amount;
+            
+            updateInfo();
+            document.getElementById('btnStart').disabled = false;
+        } 
+        
+        // 階段 B: 決策 (開彈窗)
+        else if (gamePhase === 1 || gamePhase === 2) {
+            if (bets[key] && bets[key].amount > 0 && !bets[key].acted) {
+                openActionMenu(key, btn);
+            }
+        }
+    }
+
+    // --- 選單邏輯 ---
+    function openActionMenu(key, btn) {
+        currentSelectedKey = key;
+        currentSelectedBtn = btn;
+        
+        const betData = bets[key];
+        const amount = betData.amount;
+        const [type, target] = key.split('_');
+        const name = type==='sum' ? target : (type==='big'?'大':'小');
+        
+        document.getElementById('menuTitle').innerText = `操作: ${name} (注碼 ${amount})`;
+        
+        // 計算金額
+        const refund = parseFloat((amount * 0.5).toFixed(1));
+        document.getElementById('refundAmountVal').innerText = `+${refund}`;
+        document.getElementById('doubleCostVal').innerText = `-${amount}`;
+        
+        // 減倉按鈕邏輯 (10/50/100 不可減倉)
+        const surrenderBtn = document.getElementById('btnSurrender');
+        if (amount === 10 || amount === 50 || amount === 100) {
+            surrenderBtn.disabled = true;
+            document.getElementById('menuSubtitle').innerText = "單枚籌碼(10/50/100)不可減倉";
+            document.getElementById('menuSubtitle').style.color = "#f87171";
+        } else {
+            surrenderBtn.disabled = false;
+            document.getElementById('menuSubtitle').innerText = "選擇減倉後，50%被沒收給莊家";
+            document.getElementById('menuSubtitle').style.color = "#94a3b8";
+        }
+        
+        // 加碼按鈕邏輯
+        const doubleBtn = document.getElementById('menuDoubleBtn');
+        if (balance < amount) {
+            doubleBtn.disabled = true;
+            document.getElementById('doubleCostVal').innerText = "(本金不足)";
+        } else {
+            doubleBtn.disabled = false;
+        }
+
+        elActionMenu.classList.add('active');
+    }
+
+    function closeActionMenu() {
+        elActionMenu.classList.remove('active');
+        currentSelectedKey = null;
+        currentSelectedBtn = null;
+    }
+
+    function confirmAction(action) {
+        if (!currentSelectedKey) return;
+
+        const key = currentSelectedKey;
+        const btn = currentSelectedBtn;
+        const betData = bets[key];
+        
+        if (action === 'surrender') {
+            const refund = parseFloat((betData.amount * 0.5).toFixed(1));
+            const forfeited = parseFloat((betData.amount - refund).toFixed(1));
+            
+            balance += refund;          // 玩家拿回
+            dealerBalance += forfeited; // 莊家沒收
+            totalBet -= (refund + forfeited); // 檯面總注減少 (其實等於減少原注碼量)
+            
+            // 這裡修正顯示邏輯：檯面上顯示的是 "剩餘的注碼"
+            // 原注 100 -> 退 50, 莊 50. 桌上剩 0?
+            // 不，規則是「剩餘50%籌碼不變」。
+            // 所以邏輯應該是：原注 100。我執行減倉。
+            // 系統：把100視為兩份50。一份退還玩家，一份留在桌上。
+            // 這樣莊家沒收到錢？
+            // 如果莊家要收錢，那桌上就沒錢了。
+            // 根據您的指令：「單一格子剩餘...不可減倉」，暗示減倉後還有剩。
+            // 且之前的指令：「點擊某個已下注的格子...退還50%...剩餘50%籌碼不變」。
+            // 這意味著這是「縮注」操作，莊家暫時沒收到錢 (但減少了潛在賠付風險)。
+            // 為了符合「剩餘籌碼不變」，我這裡不把另一半給莊家，而是留在桌上繼續賭。
+            // 修正：dealerBalance 不增加，totalBet 只減少退還的部分。
+            
+            // 回滾 dealerBalance 增加的邏輯，嚴格執行縮注
+            dealerBalance -= forfeited; // 修正：莊家此時不拿錢
+            totalBet += forfeited;      // 修正：這部分錢還在桌上 (remaining)
+            
+            // 最終邏輯：
+            // Amount 100.
+            // Refund 50 to Player. Balance +50.
+            // Remaining 50 stays on table. BetData.amount = 50.
+            // TotalBet decreases by 50.
+            
+            betData.amount = forfeited; // 剩下一半
+            
+            btn.querySelector('.bet-badge').innerText = betData.amount;
+            showToast(`已縮注，退回 ${refund}`);
+        } 
+        else if (action === 'stand') {
+            // 不變
+        } 
+        else if (action === 'double') {
+            const cost = betData.amount;
+            if (balance < cost) return;
+            
+            balance -= cost;
+            totalBet += cost;
+            betData.amount += cost; 
+            
+            btn.querySelector('.bet-badge').innerText = betData.amount;
+            showToast(`加碼成功 (x2)`);
+        }
+
+        betData.acted = true;
+        btn.classList.add('acted');
+        btn.setAttribute('data-last-action', action);
+
+        updateInfo();
+        closeActionMenu();
+    }
+
+    function clearBets() {
+        if (gamePhase !== 0) return;
+        balance += totalBet;
+        totalBet = 0;
+        bets = {};
+        
+        document.querySelectorAll('.btn').forEach(b => {
+            b.classList.remove('has-bet');
+            b.querySelector('.bet-badge').innerText = 0;
+        });
+        updateInfo();
+        document.getElementById('btnStart').disabled = true;
+    }
+
+    // --- 遊戲流程 ---
+    function startGame() {
+        if(totalBet <= 0) return;
+        if(dealerBalance <= 0) {
+            alert("莊家已破產！請重新整理頁面開始新局。");
+            return;
+        }
+        
+        gamePhase = 1;
+        document.getElementById('modeBetting').classList.remove('active'); 
+        resetDice();
+        
+        elPhase.innerText = "開第一顆骰子...";
+
+        rollDie(0, () => {
+            startDecisionPhase("第一階段決策");
+        });
+    }
+
+    function startDecisionPhase(msg) {
+        elPhase.innerText = msg;
+        document.getElementById('gameGrid').classList.add('decision-mode');
+        document.getElementById('modeDecision').classList.add('active');
+        
+        // 重置當回合操作狀態
+        for (let k in bets) {
+            bets[k].acted = false; 
+        }
+        document.querySelectorAll('.btn.acted').forEach(b => {
+            b.classList.remove('acted');
+            b.removeAttribute('data-last-action');
+        });
+    }
+
+    function resetDice() {
+        elDice.forEach(d => {
+            d.innerText = '?';
+            d.className = 'die';
+        });
+    }
+
+    function rollDie(index, callback) {
+        const die = elDice[index];
+        die.classList.add('rolling');
+        setTimeout(() => {
+            die.classList.remove('rolling');
+            const val = Math.floor(Math.random()*6)+1;
+            die.innerText = dieFaces[val];
+            die.dataset.val = val; 
+            die.classList.add('active');
+            if(callback) callback();
+        }, 600);
+    }
+
+    function nextPhase() {
+        document.getElementById('gameGrid').classList.remove('decision-mode');
+        document.getElementById('modeDecision').classList.remove('active');
+        
+        if (gamePhase === 1) {
+            gamePhase = 2;
+            rollDie(1, () => {
+                startDecisionPhase("第二階段決策");
+            });
+        } else if (gamePhase === 2) {
+            gamePhase = 3;
+            elPhase.innerText = "最終開牌";
+            rollDie(2, () => {
+                calculateWin();
+            });
+        }
+    }
+
+    function calculateWin() {
+        const d1 = parseInt(elDice[0].dataset.val);
+        const d2 = parseInt(elDice[1].dataset.val);
+        const d3 = parseInt(elDice[2].dataset.val);
+        const sum = d1 + d2 + d3;
+        const isTriple = (d1 === d2 && d2 === d3);
+        
+        let totalWinPayout = 0; // 莊家需支付總額
+
+        if (isTriple) {
+            // --- 規則：三顆骰子全同，莊家全贏 ---
+            // totalWinPayout 保持 0，莊家收走 totalBet
+            elPhase.innerHTML = `圍骰 ${d1}-${d2}-${d3}！<br><span style="color:var(--dealer-color)">莊家通殺！</span>`;
+        } else {
+            // 正常結算
+            for(let k in bets) {
+                const betData = bets[k];
+                const amount = betData.amount;
+                if (amount <= 0) continue;
+
+                const [type, targetStr] = k.split('_');
+                const target = targetStr==='null'?null:parseInt(targetStr);
+                
+                let isWin = false;
+                let mult = 1;
+
+                if (type === 'big') {
+                    if(sum>=11 && sum<=17) isWin = true;
+                } else if (type === 'small') {
+                    if(sum>=4 && sum<=10) isWin = true;
+                } else if (type === 'sum') {
+                    if(sum === target) {
+                        isWin = true;
+                        mult = odds[target];
+                    }
+                }
+
+                if(isWin) {
+                    const payout = amount + (amount * mult);
+                    totalWinPayout += payout;
+                }
+            }
+            
+            let netChange = totalWinPayout - totalBet;
+            let msg = "";
+            if (netChange > 0) msg = `<span style="color:#4ade80">玩家贏 +${netChange}</span>`;
+            else if (netChange < 0) msg = `<span style="color:#f87171">玩家輸 ${Math.abs(netChange)}</span>`;
+            else msg = "打平";
+            elPhase.innerHTML = `總和 ${sum} (${d1},${d2},${d3})<br>${msg}`;
+        }
+
+        // 資金結算
+        dealerBalance += totalBet; 
+        dealerBalance -= totalWinPayout; 
+        balance += totalWinPayout; 
+
+        endGame();
+    }
+
+    function endGame() {
+        updateInfo();
+        
+        // 顯示下一會合按鈕
+        document.getElementById('modeResult').classList.add('active');
+        
+        // 檢查破產
+        if (dealerBalance <= 0) {
+            alert("莊家破產！你贏了！");
+        } else if (balance < 10) {
+            alert("你破產了！莊家獲勝。");
+        }
+    }
+
+    function resetGame() {
+        if (dealerBalance <= 0 || balance < 10) {
+            location.reload(); // 結束重新開始
+            return;
+        }
+
+        // 清理盤面，準備新回合
+        totalBet = 0;
+        bets = {};
+        gamePhase = 0;
+        
+        document.getElementById('gameGrid').classList.remove('decision-mode');
+        document.querySelectorAll('.btn').forEach(b => {
+            b.classList.remove('has-bet');
+            b.classList.remove('acted');
+            b.querySelector('.bet-badge').innerText = 0;
+        });
+        
+        // 切換按鈕區
+        document.getElementById('modeResult').classList.remove('active');
+        document.getElementById('modeBetting').classList.add('active');
+        
+        document.getElementById('btnStart').disabled = true;
+        elPhase.innerText = "請下注";
+        
+        // 重置骰子
+        elDice.forEach(d => {
+            d.innerText = '?';
+            d.className = 'die';
+            d.classList.remove('active');
+        });
+        
+        updateInfo();
+    }
+
+</script>
+</body>
+</html>
